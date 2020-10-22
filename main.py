@@ -157,6 +157,9 @@ def run(dataset, model, params):
     print(final_res_string)
     return final_res_string, model_path
 
+# def str2dataset(sentences, dataset):
+#     for sentence in sentences:
+#         sentence
 
 if __name__ == '__main__':
     # random_seed = 1234
@@ -264,7 +267,10 @@ if __name__ == '__main__':
         with open('log/%s.txt' % ds_name, 'a') as fp:
             fp.writelines(log_lines)
     else:
-        model.decoding(dataset=test, model_name='rest_total_0.587880.model')
+        sentence = input()
+        #model.decoding(dataset=test, model_name='rest_total_0.587880.model')
+        results = model.API_sheng(sentence=sentence, vocab=vocab, model_name='rest_total_0.587880.model')
+        print(results)
 
 
 

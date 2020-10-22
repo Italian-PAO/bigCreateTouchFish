@@ -1,3 +1,5 @@
+import re
+
 import dynet_config
 dynet_config.set(mem='4096', random_seed=1314159)
 import dynet as dy
@@ -261,29 +263,29 @@ class Model:
         # self.parametrize()
 
         wids = x['wids']
-        cids = x['cids']
-        gold_ote_labels = x['ote_labels']
-        gold_ts_labels = x['ts_labels']
-        gold_stm_labels = x['stm_lm_labels']
+        #cids = x['cids']
+        #gold_ote_labels = x['ote_labels']
+        #gold_ts_labels = x['ts_labels']
+        #gold_stm_labels = x['stm_lm_labels']
 
         seq_len = len(wids)
 
-        if self.use_char:
-            # using both character-level word representations and word-level representations
-            ch_word_emb = []
-            for t in range(seq_len):
-                ch_seq = cids[t]
-                input_ch_emb = self.char_emb(xs=ch_seq)
-                ch_h0_f = self.lstm_char.initial_state()
-                ch_h0_b = self.lstm_char.initial_state()
-                ch_f = ch_h0_f.transduce(input_ch_emb)[-1]
-                ch_b = ch_h0_b.transduce(input_ch_emb[::-1])[-1]
-                ch_word_emb.append(dy.concatenate([ch_f, ch_b]))
-            word_emb = self.emb(xs=wids)
-            input_emb = [dy.concatenate([c, w]) for (c, w) in zip(ch_word_emb, word_emb)]
-        else:
+        # if self.use_char:
+        #     # using both character-level word representations and word-level representations
+        #     ch_word_emb = []
+        #     for t in range(seq_len):
+        #         ch_seq = cids[t]
+        #         input_ch_emb = self.char_emb(xs=ch_seq)
+        #         ch_h0_f = self.lstm_char.initial_state()
+        #         ch_h0_b = self.lstm_char.initial_state()
+        #         ch_f = ch_h0_f.transduce(input_ch_emb)[-1]
+        #         ch_b = ch_h0_b.transduce(input_ch_emb[::-1])[-1]
+        #         ch_word_emb.append(dy.concatenate([ch_f, ch_b]))
+        #     word_emb = self.emb(xs=wids)
+        #     input_emb = [dy.concatenate([c, w]) for (c, w) in zip(ch_word_emb, word_emb)]
+        # else:
             # only using word-level representations
-            input_emb = self.emb(xs=wids)
+        input_emb = self.emb(xs=wids)
 
         # equivalent to applying partial dropout on the LSTM
         if is_train:
@@ -331,13 +333,13 @@ class Model:
         # weight matrix for boundary-guided transition
         self.W_trans_ote = dy.inputTensor(self.transition_scores.copy())
 
-        losses = []
+        #losses = []
         pred_ote_labels, pred_ts_labels = [], []
         for i in range(seq_len):
             # probability distribution over ote tag
             p_y_x_ote = self.fc_ote(x=ote_hs[i])
             p_y_x_ote = dy.softmax(p_y_x_ote)
-            loss_ote = -dy.log(dy.pick(p_y_x_ote, gold_ote_labels[i]))
+            #loss_ote = -dy.log(dy.pick(p_y_x_ote, gold_ote_labels[i]))
             # probability distribution over ts tag
             p_y_x_ts = self.fc_ts(x=ts_hs_tilde[i])
             p_y_x_ts = dy.softmax(p_y_x_ts)
@@ -346,24 +348,24 @@ class Model:
             # transition score from ote tag to sentiment tag
             ote2ts = self.W_trans_ote * p_y_x_ote
             p_y_x_ts_tilde = alpha * ote2ts + (1 - alpha) * p_y_x_ts
-            loss_ts = -dy.log(dy.pick(p_y_x_ts_tilde, gold_ts_labels[i]))
-            loss_i = loss_ote / seq_len + loss_ts / seq_len
+            #loss_ts = -dy.log(dy.pick(p_y_x_ts_tilde, gold_ts_labels[i]))
+            #loss_i = loss_ote / seq_len + loss_ts / seq_len
 
             # predict if the current word is a target word according to the opinion information
             p_y_x_stm = self.fc_stm(x=stm_lm_hs[i])
-            loss_stm = dy.pickneglogsoftmax(p_y_x_stm, gold_stm_labels[i])
-            loss_i += (loss_stm / seq_len)
-            losses.append(loss_i)
+            #loss_stm = dy.pickneglogsoftmax(p_y_x_stm, gold_stm_labels[i])
+            #loss_i += (loss_stm / seq_len)
+            #losses.append(loss_i)
             pred_ote_labels.append(np.argmax(p_y_x_ote.npvalue()))
             pred_ts_labels.append(np.argmax(p_y_x_ts_tilde.npvalue()))
         # total loss of the sequence predictions
-        loss = dy.esum(losses)
+        #loss = dy.esum(losses)
         if is_train:
             # run the backward pass based on the expression
-            loss.backward()
+            #loss.backward()
             # update the model parameters
             self.optimizer.update()
-        return loss.value(), pred_ote_labels, pred_ts_labels
+        return 0, pred_ote_labels, pred_ts_labels
 
     def predict(self, dataset):
         """
@@ -470,6 +472,100 @@ class Model:
                 output_lines.append('%s\t%s\t%s\n' % (word, ote_tag, ts_tag))
             # use empty lines as the separator
             output_lines.append('\n')
+
+    def API_sheng(self, sentence, vocab, model_name=None):
+        """
+        predict the tag sequence for the dataset
+        :param dataset: dataset
+        :param model_name: path of the model parameters
+        :return:
+        """
+        model_path = './models/%s' % model_name
+        if not os.path.exists(model_path):
+            raise Exception("Invalid model path %s..." % model_path)
+        self.pc.populate(model_path)
+        #n_sample = len(dataset)
+        # gold_ote = [x['ote_tags'] for x in dataset]
+        # gold_ts = [x['ts_tags'] for x in dataset]
+
+        # if self.tagging_schema == 'BIO':
+        #     gold_ote, gold_ts = bio2ot_batch(
+        #         ote_tags=gold_ote, ts_tags=gold_ts)
+        #     gold_ote, gold_ts = ot2bieos_batch(
+        #         ote_tags=gold_ote, ts_tags=gold_ts)
+        # elif self.tagging_schema == 'OT':
+        #     gold_ote, gold_ts = ot2bieos_batch(
+        #         ote_tags=gold_ote, ts_tags=gold_ts)
+        # predicted tag sequences and the input words
+        #pred_ote, pred_ts, words = [], [], []
+        # for i in range(n_sample):
+        #     _, pred_ote_labels, pred_ts_labels = self.forward(x=dataset[i], is_train=False)
+        #     pred_ote.append(label2tag(label_sequence=pred_ote_labels, tag_vocab=self.ote_tag_vocab))
+        #     pred_ts.append(label2tag(label_sequence=pred_ts_labels, tag_vocab=self.ts_tag_vocab))
+        #     words.append(dataset[i]['words'])
+        sentence_set = {}
+        sentence_set['sentence'] = sentence
+        sentence = re.sub("[\s+\.\!\/_,$%^*(+\"\']+|[+——！，。？、~@#￥%……&*（）]+", " ", sentence)
+        sentence_set['words'] = sentence.split(" ")
+
+        words = sentence_set['words']
+        sentence_set = set_wid_sheng(dataset=sentence_set, vocab=vocab, win=3)
+
+        _, pred_ote_labels, pred_ts_labels = self.forward(x=sentence_set, is_train=False)
+        #pred_ote = label2tag(label_sequence=pred_ote_labels, tag_vocab=self.ote_tag_vocab)
+        pred_ts = label2tag(label_sequence=pred_ts_labels, tag_vocab=self.ts_tag_vocab)
+
+        # transform the output tag sequence to BIEOS tag sequence before evaluation
+        # if self.tagging_schema == 'BIO':
+        #     pred_ote, pred_ts = bio2ot_batch(
+        #             ote_tags=pred_ote, ts_tags=pred_ts)
+        #     pred_ote, pred_ts = ot2bieos_batch(
+        #             ote_tags=pred_ote, ts_tags=pred_ts)
+        # elif self.tagging_schema == 'OT':
+        #     pred_ote, pred_ts = ot2bieos_batch(
+        #             ote_tags=pred_ote, ts_tags=pred_ts)
+        # evaluation
+        # ote_scores, ts_scores = evaluate(gold_ot=gold_ote, gold_ts=gold_ts,
+        #                                  pred_ot=pred_ote, pred_ts=pred_ts)
+
+        # print("Evaluation scores: ote: f1: %.4f, ts: precision: %.4f, recall: %.4f, micro-f1: %.4f" %
+        #       (ote_scores[2], ts_scores[1], ts_scores[2], ts_scores[3]))
+
+        #output_lines = ['Dataset: %s\n' % self.ds_name, 'Model: %s\n' % model_path, 'Parameter settings: \n']
+        # params_dict = vars(self.params)
+        # for k in params_dict:
+        #     if k == 'char_vocab' or k == 'vocab':
+        #         continue
+        #     else:
+        #         v = params_dict[k]
+        #         output_lines.append('\t%s: %s\n' % (k, v))
+        #output_lines.append("==============================================\n\n")
+        # for i in range(n_sample):
+        #     ote_seq = pred_ote[i]
+        #     ts_seq = pred_ts[i]
+        #     w_seq = words[i]
+        #     assert len(ote_seq) == len(ts_seq) == len(w_seq)
+        #     for j in range(len(ote_seq)):
+        #         word = w_seq[j]
+        #         ote_tag = ote_seq[j]
+        #         ts_tag = ts_seq[j]
+        #         output_lines.append('%s\t%s\t%s\n' % (word, ote_tag, ts_tag))
+        #     # use empty lines as the separator
+        #     output_lines.append('\n')
+        #ote_seq = pred_ote
+        results = []
+
+        ts_seq = pred_ts
+        w_seq = words
+        assert len(ts_seq) == len(w_seq)
+        for j in range(len(ts_seq)):
+            word = w_seq[j]
+            #ote_tag = ote_seq[j]
+            ts_tag = ts_seq[j]
+            results.append((word, ts_tag))
+
+        return results
+
 
 
 class LSTM_CRF:

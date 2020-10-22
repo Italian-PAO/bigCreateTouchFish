@@ -509,6 +509,35 @@ def set_wid(dataset, vocab, win=1):
         dataset[i]['wids'] = wids.copy()
     return dataset
 
+def set_wid_sheng(dataset, vocab, win=1):
+    """
+    set wid field for the dataset
+    :param dataset: dataset
+    :param vocab: vocabulary
+    :param win: context window size, for window-based input, should be an odd number
+    :return: dataset with field wid
+    """
+
+    words = dataset['words']
+    lm_labels = []
+    # set labels for the auxiliary language modeling task
+    for w in words:
+        lm_labels.append(vocab[w])
+    dataset['lm_labels'] = lm_labels.copy()
+    n_padded_words = win // 2
+    pad_left = ['PADDING' for _ in range(n_padded_words)]
+    pad_right = ['PADDING' for _ in range(n_padded_words)]
+    padded_words = pad_left + words + pad_right
+    # the window-based input
+    win_input = list(ngrams(padded_words, win))
+    assert len(win_input) == len(words)
+    n_grams = []
+    for t in win_input:
+        n_grams.append(t)
+    wids = [[vocab[w] for w in ngram] for ngram in n_grams]
+    dataset['wids'] = wids.copy()
+
+    return dataset
 
 def set_cid(dataset, char_vocab):
     """
@@ -624,7 +653,58 @@ def set_lm_labels(dataset, vocab, stm_lex, stm_win=3):
     return dataset
 
 
-def build_dataset(ds_name, input_win=1, tagging_schema='BIO', stm_win=1):
+def build_dataset(ds_name, input_win=1, tagging_schema='BIEOS', stm_win=1):
+    """
+    build dataset for model training, development and inference
+    :param ds_name: dataset name
+    :param input_win: window size input
+    :param tagging_schema: tagging schema
+    :param stm_win: window size of context for the OE component
+    :return:
+    """
+    # read mpqa sentiment lexicon
+    stm_lex = read_lexicon()
+    # paths of training and testing dataset
+    train_path = './data/%s_train.txt' % ds_name
+    test_path = './data/%s_test.txt' % ds_name
+    # loaded datasets
+    train_set = read_data(path=train_path)
+    test_set = read_data(path=test_path)
+
+    vocab, char_vocab = get_vocab(train_set=train_set, test_set=test_set)
+
+    train_set = set_wid(dataset=train_set, vocab=vocab, win=input_win)
+    test_set = set_wid(dataset=test_set, vocab=vocab, win=input_win)
+    train_set = set_cid(dataset=train_set, char_vocab=char_vocab)
+    test_set = set_cid(dataset=test_set, char_vocab=char_vocab)
+
+    train_set, ote_tag_vocab, ts_tag_vocab = set_labels(dataset=train_set, tagging_schema=tagging_schema)
+    test_set, _, _ = set_labels(dataset=test_set, tagging_schema=tagging_schema)
+
+    train_set = set_lm_labels(dataset=train_set, vocab=vocab, stm_lex=stm_lex, stm_win=stm_win)
+    test_set = set_lm_labels(dataset=test_set, vocab=vocab, stm_lex=stm_lex, stm_win=stm_win)
+
+    n_train = len(train_set)
+    # use 10% training data for dev experiment
+    n_val = int(n_train * 0.1)
+    # generate a uniform random sample from np.range(n_train) of size n_val
+    # This is equivalent to np.random.permutation(np.arange(n_train))[:n_val]
+    
+    val_sample_ids = np.random.choice(n_train, n_val, replace=False)
+    print("The first 15 validation samples:", val_sample_ids[:15])
+    val_set, tmp_train_set = [], []
+    for i in range(n_train):
+        record = train_set[i]
+        if i in val_sample_ids:
+            val_set.append(record)
+        else:
+            tmp_train_set.append(record)
+    train_set = [r for r in tmp_train_set]
+
+    return train_set, val_set, test_set, vocab, char_vocab, ote_tag_vocab, ts_tag_vocab
+
+
+def build_dataset_sheng(ds_name, input_win=1, tagging_schema='BIEOS', stm_win=1):
     """
     build dataset for model training, development and inference
     :param ds_name: dataset name
@@ -659,7 +739,7 @@ def build_dataset(ds_name, input_win=1, tagging_schema='BIO', stm_win=1):
     n_val = int(n_train * 0.1)
     # generate a uniform random sample from np.range(n_train) of size n_val
     # This is equivalent to np.random.permutation(np.arange(n_train))[:n_val]
-    
+
     val_sample_ids = np.random.choice(n_train, n_val, replace=False)
     print("The first 15 validation samples:", val_sample_ids[:15])
     val_set, tmp_train_set = [], []
@@ -672,7 +752,6 @@ def build_dataset(ds_name, input_win=1, tagging_schema='BIO', stm_win=1):
     train_set = [r for r in tmp_train_set]
 
     return train_set, val_set, test_set, vocab, char_vocab, ote_tag_vocab, ts_tag_vocab
-
 
 def load_embeddings(path, vocab, ds_name, emb_name):
     """
