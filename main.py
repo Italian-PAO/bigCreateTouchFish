@@ -264,7 +264,7 @@ if __name__ == '__main__':
         with open('log/%s.txt' % ds_name, 'a') as fp:
             fp.writelines(log_lines)
     else:
-        model.decoding(dataset=test, model_name='lstm_cascade_laptop14_0.573138.model')
+        model.decoding(dataset=test, model_name='rest_total_0.587880.model')
 
 
 
