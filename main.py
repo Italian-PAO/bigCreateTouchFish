@@ -163,7 +163,7 @@ if __name__ == '__main__':
     # random.seed(random_seed)
 
     parser = argparse.ArgumentParser(description="Open Domain ABSA")
-    parser.add_argument("-ds_name", type=str, default='rest14', help="dataset name")
+    parser.add_argument("-ds_name", type=str, default='rest_total', help="dataset name")
     # dimension of LSTM hidden representations
     parser.add_argument("-dim_char", type=int, default=30, help="dimension of char embeddings")
     parser.add_argument("-dim_char_h", type=int, default=50, help="dimension of char hidden representations")
@@ -171,8 +171,8 @@ if __name__ == '__main__':
     parser.add_argument("-dim_ts_h", type=int, default=50, help="hidden dimension for targeted sentiment")
     parser.add_argument("-input_win", type=int, default=3, help="window size of input")
     parser.add_argument("-stm_win", type=int, default=3, help="window size of OE component")
-    parser.add_argument("-optimizer", type=str, default="sgd", help="optimizer (or, trainer)")
-    parser.add_argument("-n_epoch", type=int, default=40, help="number of training epoch")
+    parser.add_argument("-optimizer", type=str, default="adam", help="optimizer (or, trainer)")
+    parser.add_argument("-n_epoch", type=int, default=50, help="number of training epoch")
     parser.add_argument("-dropout", type=float, default=0.5, help="dropout rate for final representations")
     parser.add_argument("-emb_name", type=str, default="glove_840B", help="name of word embedding")
     # Note: tagging schema is OT in the original data record
@@ -252,7 +252,7 @@ if __name__ == '__main__':
     args.char_vocab = char_vocab
     model = Model(params=args, vocab=vocab, embeddings=embeddings, char_embeddings=char_embeddings)
 
-    mode = 'train-test'
+    mode = 'test'
     if mode == 'train-test':
         final_res_string, model_path = run(dataset=[train, val, test], model=model, params=args)
         log_lines.append(final_res_string + "\n")
